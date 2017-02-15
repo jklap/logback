@@ -20,8 +20,6 @@ import ch.qos.logback.core.util.Duration;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This appender serves as the base class for actual SiftingAppenders
@@ -42,7 +40,7 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     Discriminator<E> discriminator;
 
-    private boolean individualExecutors = true;
+    private boolean disableCleanupThread = false;
     private Cleaner cleaner = null;
 
     public Duration getTimeout() {
@@ -61,8 +59,8 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
         this.maxAppenderCount = maxAppenderCount;
     }
 
-    public void setIndividualExecutors(boolean individualExecutors ) {
-        this.individualExecutors = individualExecutors;
+    public void setDisableCleanupThread(boolean disableCleanupThread) {
+        this.disableCleanupThread = disableCleanupThread;
     }
 
     /**
@@ -99,7 +97,7 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     @Override
     public void stop() {
-        if ( cleaner !=  null ) {
+        if ( cleaner != null ) {
             cleaner.shouldRun = false;
             synchronized (cleaner.nextClean) {
                 cleaner.nextClean.notifyAll();
@@ -124,15 +122,7 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
         // marks the appender for removal as specified by the user
         if (eventMarksEndOfLife(event)) {
             appenderTracker.endOfLife(discriminatingValue);
-            if ( individualExecutors ) {
-                ScheduledExecutorService executorService = context.getScheduledExecutorService();
-                executorService.schedule(new Runnable() {
-                    @Override
-                    public void run() {
-                        appenderTracker.removeStaleComponents(new Date().getTime());
-                    }
-                }, AppenderTracker.LINGERING_TIMEOUT + 1, TimeUnit.MILLISECONDS);
-            } else {
+            if ( ! disableCleanupThread ) {
                 if ( cleaner == null ) {
                     cleaner = new Cleaner();
                     Thread t = new Thread(cleaner);
@@ -144,6 +134,9 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
                     cleaner.nextClean.notifyAll();
                 }
             }
+        }
+        if ( disableCleanupThread ) {
+            appenderTracker.removeStaleComponents(timestamp);
         }
         appender.doAppend(event);
     }

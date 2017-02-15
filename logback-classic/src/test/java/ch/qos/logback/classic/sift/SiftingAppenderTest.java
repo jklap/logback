@@ -225,13 +225,13 @@ public class SiftingAppenderTest {
     }
 
     @Test
-    public void sessionFinalizationShouldCloseWithExecutor() throws JoranException {
-        String mdcKey = "executor";
+    public void sessionFinalizationCloseWithThreadDisabled() throws JoranException {
+        String mdcKey = "noThread";
         String mdcVal = "session" + diff;
-        configure(SIFT_FOLDER_PREFIX + "executor.xml");
+        configure(SIFT_FOLDER_PREFIX + "noThread.xml");
         MDC.put(mdcKey, mdcVal);
-        logger.debug("executor 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "executor 2");
+        logger.debug("noThread 1");
+        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "noThread 2");
         SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
         AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
 
@@ -245,81 +245,16 @@ public class SiftingAppenderTest {
             // ignored
         }
 
-        // previously lingering appenders should be closed upon timeout
-        assertFalse(appender.isStarted());
-        // and they should be gone
-        assertEquals(0, tracker.allKeys().size());
-    }
-
-    @Test
-    public void sessionFinalizationCloseWithExecutorTooEarly() throws JoranException {
-        String mdcKey = "executor";
-        String mdcVal = "session" + diff;
-        configure(SIFT_FOLDER_PREFIX + "executor.xml");
-        MDC.put(mdcKey, mdcVal);
-        logger.debug("executor 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "executor 2");
-        SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
-        AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
-
         assertEquals(1, tracker.allKeys().size());
-        Appender<ILoggingEvent> appender = tracker.find(mdcVal);
-        assertTrue(appender.isStarted());
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT - 1000);
-        } catch (InterruptedException e) {
-            // ignored
-        }
-
-        // previously lingering appenders still be open as we haven't hit the timeout
-        assertTrue(appender.isStarted());
-        assertEquals(1, tracker.allKeys().size());
-    }
-
-    @Test
-    public void sessionFinalizationShouldCloseWithExecutorMultiple() throws JoranException {
-        String mdcKey = "executor";
-        String mdcVal = "A_session" + diff;
-        configure(SIFT_FOLDER_PREFIX + "executor.xml");
-        MDC.put(mdcKey, mdcVal);
-        logger.debug("executor 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "executor 2");
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2);
-        } catch (InterruptedException e) {
-            // ignored
-        }
 
         MDC.put(mdcKey, mdcVal + "_2");
-        logger.debug("executor 3");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "executor 4");
+        logger.debug("noThread 3");
+        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "noThread 4");
 
-        SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
-        AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
-
-        assertEquals(2, tracker.allKeys().size());
-        Appender<ILoggingEvent> appender = tracker.find(mdcVal);
-        assertTrue(appender.isStarted());
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2 - 1000);
-        } catch (InterruptedException e) {
-            // ignored
-            System.out.println("here");
-        }
-
+        // previously lingering appenders should be closed upon timeout
+        assertFalse(appender.isStarted());
+        // but now we have a new one
         assertEquals(1, tracker.allKeys().size());
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2);
-        } catch (InterruptedException e) {
-            // ignored
-            System.out.println("here");
-        }
-
-        assertEquals(0, tracker.allKeys().size());
     }
 
     @Test

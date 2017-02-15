@@ -5,11 +5,12 @@
 
   <appender name="SIFT" class="ch.qos.logback.classic.sift.SiftingAppender">
     <discriminator>
-      <key>executor</key>
-      <defaultValue>executor</defaultValue>
+      <key>noThread</key>
+      <defaultValue>noThread</defaultValue>
     </discriminator>
+    <disableCleanupThread>true</disableCleanupThread>
     <sift>
-      <appender name="list-${executor}"
+      <appender name="list-${noThread}"
         class="ch.qos.logback.core.read.ListAppender" />
     </sift>
   </appender>

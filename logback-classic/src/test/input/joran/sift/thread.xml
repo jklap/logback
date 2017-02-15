@@ -8,7 +8,6 @@
       <key>thread</key>
       <defaultValue>thread</defaultValue>
     </discriminator>
-    <individualExecutors>false</individualExecutors>
     <sift>
       <appender name="list-${thread}"
         class="ch.qos.logback.core.read.ListAppender" />
