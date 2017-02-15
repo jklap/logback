@@ -17,6 +17,12 @@ import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.AppenderBase;
 import ch.qos.logback.core.util.Duration;
 
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 /**
  * This appender serves as the base class for actual SiftingAppenders
  * implemented by the logback-classic and logback-access modules. In a nutshell,
@@ -36,6 +42,9 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     Discriminator<E> discriminator;
 
+    private boolean individualExecutors = true;
+    private Cleaner cleaner = null;
+
     public Duration getTimeout() {
         return timeout;
     }
@@ -50,6 +59,10 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     public void setMaxAppenderCount(int maxAppenderCount) {
         this.maxAppenderCount = maxAppenderCount;
+    }
+
+    public void setIndividualExecutors(boolean individualExecutors ) {
+        this.individualExecutors = individualExecutors;
     }
 
     /**
@@ -86,6 +99,12 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     @Override
     public void stop() {
+        if ( cleaner !=  null ) {
+            cleaner.shouldRun = false;
+            synchronized (cleaner.nextClean) {
+                cleaner.nextClean.notifyAll();
+            }
+        }
         for (Appender<E> appender : appenderTracker.allComponents()) {
             appender.stop();
         }
@@ -105,8 +124,27 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
         // marks the appender for removal as specified by the user
         if (eventMarksEndOfLife(event)) {
             appenderTracker.endOfLife(discriminatingValue);
+            if ( individualExecutors ) {
+                ScheduledExecutorService executorService = context.getScheduledExecutorService();
+                executorService.schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        appenderTracker.removeStaleComponents(new Date().getTime());
+                    }
+                }, AppenderTracker.LINGERING_TIMEOUT + 1, TimeUnit.MILLISECONDS);
+            } else {
+                if ( cleaner == null ) {
+                    cleaner = new Cleaner();
+                    Thread t = new Thread(cleaner);
+                    t.start();
+                }
+
+                synchronized (cleaner.nextClean) {
+                    cleaner.nextClean.add(new Date().getTime() + AppenderTracker.LINGERING_TIMEOUT + 1);
+                    cleaner.nextClean.notifyAll();
+                }
+            }
         }
-        appenderTracker.removeStaleComponents(timestamp);
         appender.doAppend(event);
     }
 
@@ -140,4 +178,39 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
             return null;
         }
     }
+
+    public class Cleaner implements Runnable {
+        boolean shouldRun = true;
+        final Queue<Long> nextClean = new LinkedList<Long>();
+
+        @Override
+        public void run() {
+            while ( shouldRun ) {
+                synchronized (nextClean) {
+                    while (nextClean.isEmpty() && shouldRun) {
+                        try {
+                            nextClean.wait();
+                        } catch (InterruptedException e) {
+                            // ignored
+                        }
+                    }
+                }
+                if ( ! shouldRun ) {
+                    break;
+                }
+                long next = nextClean.remove();
+                long now = new Date().getTime();
+                while (next > now) {
+                    try {
+                        Thread.sleep(next - now);
+                    } catch (InterruptedException e) {
+                        // ignore
+                    }
+                    now = new Date().getTime();
+                }
+                appenderTracker.removeStaleComponents(now);
+            }
+        }
+    }
+
 }
