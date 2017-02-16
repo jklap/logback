@@ -225,58 +225,49 @@ public class SiftingAppenderTest {
     }
 
     @Test
-    public void sessionFinalizationCloseWithThreadDisabled() throws JoranException {
+    public void sessionFinalizationCloseWithThreadDisabled() throws JoranException, InterruptedException {
         String mdcKey = "noThread";
         String mdcVal = "session" + diff;
         configure(SIFT_FOLDER_PREFIX + "noThread.xml");
         MDC.put(mdcKey, mdcVal);
-        logger.debug("noThread 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "noThread 2");
         SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
         AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
+
+        sa.setCurrentTime(System.currentTimeMillis());
+        logger.debug("noThread 1");
+        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "noThread 2");
 
         assertEquals(1, tracker.allKeys().size());
         Appender<ILoggingEvent> appender = tracker.find(mdcVal);
         assertTrue(appender.isStarted());
 
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT + 1000);
-        } catch (InterruptedException e) {
-            // ignored
-        }
+        sa.setCurrentTime(System.currentTimeMillis() + AppenderTracker.LINGERING_TIMEOUT + 1);
+        sa.wakeCleanerThread();
+        Thread.sleep(100);
 
-        assertEquals(1, tracker.allKeys().size());
-
-        MDC.put(mdcKey, mdcVal + "_2");
-        logger.debug("noThread 3");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "noThread 4");
-
-        // previously lingering appenders should be closed upon timeout
-        assertFalse(appender.isStarted());
-        // but now we have a new one
         assertEquals(1, tracker.allKeys().size());
     }
 
     @Test
-    public void sessionFinalizationCloseWithThread() throws JoranException {
+    public void sessionFinalizationCloseWithThread() throws JoranException, InterruptedException {
         String mdcKey = "thread";
         String mdcVal = "session" + diff;
         configure(SIFT_FOLDER_PREFIX + "thread.xml");
         MDC.put(mdcKey, mdcVal);
-        logger.debug("thread 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 2");
         SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
         AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
+
+        sa.setCurrentTime(System.currentTimeMillis());
+        logger.debug("thread 1");
+        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 2");
 
         assertEquals(1, tracker.allKeys().size());
         Appender<ILoggingEvent> appender = tracker.find(mdcVal);
         assertTrue(appender.isStarted());
 
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT + 1000);
-        } catch (InterruptedException e) {
-            // ignored
-        }
+        sa.setCurrentTime(System.currentTimeMillis() + AppenderTracker.LINGERING_TIMEOUT + 1);
+        sa.wakeCleanerThread();
+        Thread.sleep(100);
 
         // previously lingering appenders should be closed upon timeout
         assertFalse(appender.isStarted());
@@ -285,69 +276,29 @@ public class SiftingAppenderTest {
     }
 
     @Test
-    public void sessionFinalizationCloseWithThreadTooEarly() throws JoranException {
+    public void sessionFinalizationCloseWithThreadTooEarly() throws JoranException, InterruptedException {
         String mdcKey = "thread";
         String mdcVal = "session" + diff;
         configure(SIFT_FOLDER_PREFIX + "thread.xml");
         MDC.put(mdcKey, mdcVal);
-        logger.debug("thread 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 2");
         SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
         AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
+
+        sa.setCurrentTime(System.currentTimeMillis());
+        logger.debug("thread 1");
+        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 2");
 
         assertEquals(1, tracker.allKeys().size());
         Appender<ILoggingEvent> appender = tracker.find(mdcVal);
         assertTrue(appender.isStarted());
 
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT - 1000);
-        } catch (InterruptedException e) {
-            // ignored
-        }
+        sa.setCurrentTime(System.currentTimeMillis() + AppenderTracker.LINGERING_TIMEOUT - 1000);
+        sa.wakeCleanerThread();
+        Thread.sleep(100);
 
         // previously lingering appenders still be open as we haven't hit the timeout
         assertTrue(appender.isStarted());
         assertEquals(1, tracker.allKeys().size());
-    }
-
-    @Test
-    public void sessionFinalizationCloseWithThreadMultiple() throws JoranException {
-        String mdcKey = "thread";
-        String mdcVal = "B_session" + diff;
-        configure(SIFT_FOLDER_PREFIX + "thread.xml");
-        MDC.put(mdcKey, mdcVal);
-        logger.debug("thread 1");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 2");
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        MDC.put(mdcKey, mdcVal + "_2");
-        logger.debug("thread 3");
-        logger.debug(ClassicConstants.FINALIZE_SESSION_MARKER, "thread 4");
-
-        SiftingAppender sa = (SiftingAppender) root.getAppender("SIFT");
-        AppenderTracker<ILoggingEvent> tracker = sa.getAppenderTracker();
-
-        assertEquals(2, tracker.allKeys().size());
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2 + 200);
-        } catch (InterruptedException e) {
-            // ignored
-        }
-
-        assertEquals(1, tracker.allKeys().size());
-
-        try {
-            Thread.sleep(AppenderTracker.LINGERING_TIMEOUT / 2);
-        } catch (InterruptedException e) {
-            // ignored
-        }
-        assertEquals(0, tracker.allKeys().size());
     }
 
     @Test

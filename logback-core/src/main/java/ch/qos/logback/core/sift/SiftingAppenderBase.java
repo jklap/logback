@@ -17,7 +17,6 @@ import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.AppenderBase;
 import ch.qos.logback.core.util.Duration;
 
-import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -42,6 +41,8 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     private boolean disableCleanupThread = false;
     private Cleaner cleaner = null;
+    private Thread cleanerThread = null;
+    private long artificialCurrentTime = -1;
 
     public Duration getTimeout() {
         return timeout;
@@ -61,6 +62,32 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
 
     public void setDisableCleanupThread(boolean disableCleanupThread) {
         this.disableCleanupThread = disableCleanupThread;
+    }
+
+    /**
+     * Set the "current time", used by unit tests to validate stale component checks
+     * @param timeInMillis
+     */
+    public void setCurrentTime(long timeInMillis) {
+        artificialCurrentTime = timeInMillis;
+    }
+
+    public long getCurrentTime() {
+        // if time is forced return the time set by user
+        if (artificialCurrentTime >= 0) {
+            return artificialCurrentTime;
+        } else {
+            return System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Method that should only be used by unit tests for validating state component checks
+     */
+    public void wakeCleanerThread() {
+        if ( cleanerThread != null ) {
+            cleanerThread.interrupt();
+        }
     }
 
     /**
@@ -125,12 +152,12 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
             if ( ! disableCleanupThread ) {
                 if ( cleaner == null ) {
                     cleaner = new Cleaner();
-                    Thread t = new Thread(cleaner);
-                    t.start();
+                    cleanerThread = new Thread(cleaner);
+                    cleanerThread.start();
                 }
 
                 synchronized (cleaner.nextClean) {
-                    cleaner.nextClean.add(new Date().getTime() + AppenderTracker.LINGERING_TIMEOUT + 1);
+                    cleaner.nextClean.add(getCurrentTime() + AppenderTracker.LINGERING_TIMEOUT + 1);
                     cleaner.nextClean.notifyAll();
                 }
             }
@@ -192,14 +219,14 @@ public abstract class SiftingAppenderBase<E> extends AppenderBase<E> {
                     break;
                 }
                 long next = nextClean.remove();
-                long now = new Date().getTime();
+                long now = getCurrentTime();
                 while (next > now) {
                     try {
                         Thread.sleep(next - now);
                     } catch (InterruptedException e) {
                         // ignore
                     }
-                    now = new Date().getTime();
+                    now = getCurrentTime();
                 }
                 appenderTracker.removeStaleComponents(now);
             }
